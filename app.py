@@ -1731,13 +1731,32 @@ def main():
                     st.error(f"❌ Error processing data: {str(e)}")
                     st.exception(e)
 
-            # Fallback Export section: remains available across reruns using session state
-            if ('plot_data_latest' in st.session_state) and (not st.session_state.get('export_section_shown', False)):
+            # Fallback Export section: always available across reruns when data exists
+            if 'plot_data_latest' in st.session_state:
                 st.subheader("📄 Export Report")
                 st.caption("Use the Excel download for trimmed data with the plot on top and stability data included.")
                 pd_latest = st.session_state['plot_data_latest']
                 si_latest = st.session_state.get('sample_interval_sec', sample_interval_sec)
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+                # If an Excel file was prepared earlier, offer immediate download
+                prepared_bytes = st.session_state.get('prepared_excel_bytes')
+                prepared_name = st.session_state.get('prepared_excel_filename', f"trimmed_data_{timestamp}.xlsx")
+                prepared_help = st.session_state.get('prepared_excel_help', "Excel export includes trimmed data sheet, a plot sheet at the top, stability results, and your test metadata")
+                if prepared_bytes:
+                    st.success("Excel report prepared. Click below to download.")
+                    st.download_button(
+                        label="📊 Download Excel (Trimmed Data + Plot + Stability)",
+                        data=prepared_bytes,
+                        file_name=prepared_name,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                        help=prepared_help
+                    )
+                    if st.button("Clear prepared Excel", help="Removes the prepared file so you can re-prepare with new settings"):
+                        st.session_state.pop('prepared_excel_bytes', None)
+                        st.session_state.pop('prepared_excel_filename', None)
+                        st.session_state.pop('prepared_excel_help', None)
 
                 # Metadata fields
                 st.markdown("**Test Metadata (included in Excel):**")
