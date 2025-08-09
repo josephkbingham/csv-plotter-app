@@ -1751,48 +1751,54 @@ def main():
 
                 # Validation
                 meta_errors = []
-                if st.button("📊 Download Excel (Trimmed Data + Plot + Stability)", use_container_width=True):
-                    if not test_name or not test_name.strip():
-                        meta_errors.append("Test Name is required.")
-                    if not test_description or not test_description.strip():
-                        meta_errors.append("Test Description is required.")
-                    if not test_date or not test_date.strip():
-                        meta_errors.append("Test Date is required.")
-                    if not test_person or not test_person.strip():
-                        meta_errors.append("Test Person is required.")
+                if not test_name or not test_name.strip():
+                    meta_errors.append("Test Name is required.")
+                if not test_description or not test_description.strip():
+                    meta_errors.append("Test Description is required.")
+                if not test_date or not test_date.strip():
+                    meta_errors.append("Test Date is required.")
+                if not test_person or not test_person.strip():
+                    meta_errors.append("Test Person is required.")
 
-                    if meta_errors:
-                        for err in meta_errors:
-                            st.error(err)
-                    else:
-                        try:
-                            report_meta = {
-                                'test_name': test_name.strip(),
-                                'test_description': test_description.strip(),
-                                'test_date': test_date.strip(),
-                                'test_person': test_person.strip(),
-                            }
-                            original_filename = st.session_state.get('last_original_filename', (
-                                uploaded_file.name.rsplit('.', 1)[0] if 'uploaded_file' in locals() and hasattr(uploaded_file, 'name') else "temperature_data"
-                            ))
-                            excel_buffer = export_trimmed_data_to_excel(
-                                pd_latest['time_hours'],
-                                pd_latest['data'],
-                                si_latest,
-                                pd_latest,
-                                original_filename,
-                                report_meta=report_meta
-                            )
-                            st.download_button(
-                                label="Click here to download your Excel report",
-                                data=excel_buffer.getvalue(),
-                                file_name=f"trimmed_data_{timestamp}.xlsx",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                use_container_width=True,
-                                help="Excel export includes trimmed data sheet, a plot sheet at the top, stability results, and your test metadata"
-                            )
-                        except Exception as e:
-                            st.error(f"Excel export failed: {str(e)}")
+                if meta_errors:
+                    for err in meta_errors:
+                        st.error(err)
+
+                # Prepare Excel data for single-click download when valid
+                excel_data = None
+                if not meta_errors:
+                    try:
+                        report_meta = {
+                            'test_name': test_name.strip(),
+                            'test_description': test_description.strip(),
+                            'test_date': test_date.strip(),
+                            'test_person': test_person.strip(),
+                        }
+                        original_filename = st.session_state.get('last_original_filename', (
+                            uploaded_file.name.rsplit('.', 1)[0] if 'uploaded_file' in locals() and hasattr(uploaded_file, 'name') else "temperature_data"
+                        ))
+                        excel_buffer = export_trimmed_data_to_excel(
+                            pd_latest['time_hours'],
+                            pd_latest['data'],
+                            si_latest,
+                            pd_latest,
+                            original_filename,
+                            report_meta=report_meta
+                        )
+                        excel_data = excel_buffer.getvalue()
+                    except Exception as e:
+                        st.error(f"Excel export failed: {str(e)}")
+                        excel_data = None
+
+                st.download_button(
+                    label="📊 Download Excel (Trimmed Data + Plot + Stability)",
+                    data=(excel_data or b''),
+                    file_name=f"trimmed_data_{timestamp}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    help="Excel export includes trimmed data sheet, a plot sheet at the top, stability results, and your test metadata",
+                    disabled=bool(meta_errors or not excel_data)
+                )
         
         except Exception as e:
             st.error(f"❌ Error loading Excel file: {str(e)}")
