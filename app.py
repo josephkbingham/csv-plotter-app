@@ -1492,10 +1492,10 @@ def main():
                             for channel, result in stability_results.items():
                                 if result['stable']:
                                     status = "✅ Stable"
-                                    start_time = f"{result['stability_start_time']:.2f}h" if result.get('stability_start_time') else "N/A"
-                                    end_time = f"{result['stability_end_time']:.2f}h" if result.get('stability_end_time') else "N/A"
-                                    duration = f"{result['stability_duration']:.2f}h" if result.get('stability_duration', 0) > 0 else "N/A"
-                                    avg_temp = f"{result['average_temp']:.2f}°C" if result.get('average_temp') else "N/A"
+                                    start_time = f"{result['stability_start_time']:.2f}h" if result.get('stability_start_time') is not None else "N/A"
+                                    end_time = f"{result['stability_end_time']:.2f}h" if result.get('stability_end_time') is not None else "N/A"
+                                    duration = f"{result['stability_duration']:.2f}h" if (result.get('stability_duration') is not None and result.get('stability_duration') > 0) else "N/A"
+                                    avg_temp = f"{result['average_temp']:.2f}°C" if result.get('average_temp') is not None else "N/A"
                                     max_dev = f"{result['max_deviation']:.2f}°C" if result.get('max_deviation') is not None else "N/A"
                                 else:
                                     status = "❌ Unstable"
