@@ -1730,6 +1730,7 @@ def main():
                 use_container_width=True,
                 help=prepared_help
             )
+            st.caption(f"Filename: {prepared_name}")
             if st.button("Clear prepared Excel", help="Removes the prepared file so you can re-prepare with new settings"):
                 st.session_state.pop('prepared_excel_bytes', None)
                 st.session_state.pop('prepared_excel_filename', None)
@@ -1749,6 +1750,7 @@ def main():
                     test_date = st.text_input("Test Date", key="bottom_meta_test_date", placeholder="YYYY-MM-DD or free text")
                 with col_meta2:
                     test_person = st.text_input("Test Person", key="bottom_meta_test_person")
+                excel_filename_input = st.text_input("Excel File Name (optional)", key="bottom_meta_excel_filename", placeholder="my_report.xlsx")
                 submit_excel = st.form_submit_button("Generate Excel", type="primary")
             if submit_excel:
                 try:
@@ -1767,8 +1769,17 @@ def main():
                         original_filename,
                         report_meta=report_meta
                     )
+                    # Determine prepared filename
+                    excel_filename_clean = (excel_filename_input or '').strip()
+                    if excel_filename_clean:
+                        # Ensure .xlsx extension
+                        if not excel_filename_clean.lower().endswith('.xlsx'):
+                            excel_filename_clean += '.xlsx'
+                        prepared_name = excel_filename_clean
+                    else:
+                        prepared_name = f"trimmed_data_{timestamp}.xlsx"
                     st.session_state['prepared_excel_bytes'] = excel_buffer.getvalue()
-                    st.session_state['prepared_excel_filename'] = f"trimmed_data_{timestamp}.xlsx"
+                    st.session_state['prepared_excel_filename'] = prepared_name
                     st.session_state['prepared_excel_help'] = "Excel export includes trimmed data sheet, a plot sheet at the top, stability results, and your test metadata"
                     st.session_state['show_excel_meta_form'] = False
                     st.success("Excel report prepared. Use the download button above.")
