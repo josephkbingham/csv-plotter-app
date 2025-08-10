@@ -915,6 +915,7 @@ def main():
                         st.session_state.global_end_trim = enable_end_trim
                         st.session_state.global_start_time = start_time_hours if enable_start_trim else None
                         st.session_state.global_end_time = end_time_hours if enable_end_trim else None
+                        st.session_state.global_preserve_original_time = preserve_original_time
                         
                         st.success("✅ Trimming settings applied! All future analysis will use only the selected data range.")
                         st.info("🔄 Any graphs you generate from now on will automatically exclude the trimmed regions.")
@@ -1412,12 +1413,6 @@ def main():
                 start_time = time.time()  # Initialize timing outside try block
                 try:
                     
-                    # If no manual trimming selected this run, disable any stale global trimming
-                    if not (start_time_hours > 0.0 + 1e-9 or (('graph_data' in st.session_state) and (st.session_state.graph_data['time_hours'][-1] if 'graph_data' in st.session_state else 0) > 0 and (False))):
-                        st.session_state['global_trim_enabled'] = False
-                        st.session_state['global_start_time'] = None
-                        st.session_state['global_end_time'] = None
-                    
                     # Process the data
                     plot_data, fig = process_temperature_data(
                         df, descriptor_row, first_data_row, sample_interval_sec,
@@ -1425,9 +1420,9 @@ def main():
                         tick_interval_min, colormap_name, custom_colors_input,
                         curve_fit_params=curve_fit_params,
                         temp_rating=temp_rating,
-                        enable_start_trim=False,
+                        enable_start_trim=enable_start_trim,
                         start_time_hours=start_time_hours,
-                        enable_end_trim=False,
+                        enable_end_trim=enable_end_trim,
                         end_time_hours=end_time_hours,
                         preserve_original_time=preserve_original_time,
                         filter_params=filter_params
