@@ -1554,43 +1554,50 @@ def main():
 
                         with col_download3:
                             # Excel export with trimmed data, plot, stability, and test metadata
-                            with st.form("excel_export_form"):
-                                st.markdown("**Test Metadata (included in Excel):**")
-                                test_name = st.text_input("Test Name", key="meta_test_name")
-                                test_description = st.text_area("Test Description", key="meta_test_desc", height=80)
-                                col_meta1, col_meta2 = st.columns(2)
-                                with col_meta1:
-                                    test_date = st.text_input("Test Date", key="meta_test_date", placeholder="YYYY-MM-DD or free text")
-                                with col_meta2:
-                                    test_person = st.text_input("Test Person", key="meta_test_person")
-                                prepare = st.form_submit_button("Prepare Excel", type="primary")
-
-                            if prepare:
-                                try:
-                                    report_meta = {
-                                        'test_name': (test_name or '').strip() or None,
-                                        'test_description': (test_description or '').strip() or None,
-                                        'test_date': (test_date or '').strip() or None,
-                                        'test_person': (test_person or '').strip() or None,
-                                    }
-                                    pd_latest = st.session_state.get('plot_data_latest', plot_data)
-                                    si_latest = st.session_state.get('sample_interval_sec', sample_interval_sec)
-                                    original_filename = st.session_state.get('last_original_filename', (
-                                        uploaded_file.name.rsplit('.', 1)[0] if hasattr(uploaded_file, 'name') else "temperature_data"
-                                    ))
-                                    excel_buffer = export_trimmed_data_to_excel(
-                                        pd_latest['time_hours'], 
-                                        pd_latest['data'], 
-                                        si_latest, 
-                                        pd_latest, 
-                                        original_filename,
-                                        report_meta=report_meta
-                                    )
-                                    st.session_state['prepared_excel_bytes'] = excel_buffer.getvalue()
-                                    st.session_state['prepared_excel_filename'] = f"trimmed_data_{timestamp}.xlsx"
-                                    st.session_state['prepared_excel_help'] = "Excel export includes trimmed data sheet, a plot sheet at the top, stability results, and your test metadata"
-                                except Exception as e:
-                                    st.error(f"Excel export failed: {str(e)}")
+                            show_excel_form = st.session_state.get('show_excel_meta_form', False)
+                            if not show_excel_form:
+                                if st.button("Prepare Excel", type="primary", use_container_width=True):
+                                    st.session_state['show_excel_meta_form'] = True
+                            else:
+                                with st.form("excel_export_form"):
+                                    st.markdown("Enter test metadata for Excel export:")
+                                    test_name = st.text_input("Test Name", key="meta_test_name")
+                                    test_description = st.text_area("Test Description", key="meta_test_desc", height=80)
+                                    col_meta1, col_meta2 = st.columns(2)
+                                    with col_meta1:
+                                        test_date = st.text_input("Test Date", key="meta_test_date", placeholder="YYYY-MM-DD or free text")
+                                    with col_meta2:
+                                        test_person = st.text_input("Test Person", key="meta_test_person")
+                                    submit_excel = st.form_submit_button("Generate Excel", type="primary")
+                                if submit_excel:
+                                    try:
+                                        report_meta = {
+                                            'test_name': (test_name or '').strip() or None,
+                                            'test_description': (test_description or '').strip() or None,
+                                            'test_date': (test_date or '').strip() or None,
+                                            'test_person': (test_person or '').strip() or None,
+                                        }
+                                        pd_latest = st.session_state.get('plot_data_latest', plot_data)
+                                        si_latest = st.session_state.get('sample_interval_sec', sample_interval_sec)
+                                        original_filename = st.session_state.get('last_original_filename', (
+                                            uploaded_file.name.rsplit('.', 1)[0] if hasattr(uploaded_file, 'name') else "temperature_data"
+                                        ))
+                                        excel_buffer = export_trimmed_data_to_excel(
+                                            pd_latest['time_hours'], 
+                                            pd_latest['data'], 
+                                            si_latest, 
+                                            pd_latest, 
+                                            original_filename,
+                                            report_meta=report_meta
+                                        )
+                                        st.session_state['prepared_excel_bytes'] = excel_buffer.getvalue()
+                                        st.session_state['prepared_excel_filename'] = f"trimmed_data_{timestamp}.xlsx"
+                                        st.session_state['prepared_excel_help'] = "Excel export includes trimmed data sheet, a plot sheet at the top, stability results, and your test metadata"
+                                        st.session_state['show_excel_meta_form'] = False
+                                    except Exception as e:
+                                        st.error(f"Excel export failed: {str(e)}")
+                                if st.button("Cancel", help="Hide metadata form"):
+                                    st.session_state['show_excel_meta_form'] = False
 
                             # Show download if prepared in this or a previous run
                             excel_bytes = st.session_state.get('prepared_excel_bytes')
@@ -1758,66 +1765,49 @@ def main():
                         st.session_state.pop('prepared_excel_filename', None)
                         st.session_state.pop('prepared_excel_help', None)
 
-                # Metadata fields
-                st.markdown("**Test Metadata (included in Excel):**")
-                test_name = st.text_input("Test Name", key="meta_test_name")
-                test_description = st.text_area("Test Description", key="meta_test_desc", height=80)
-                col_meta1, col_meta2 = st.columns(2)
-                with col_meta1:
-                    test_date = st.text_input("Test Date", key="meta_test_date", placeholder="YYYY-MM-DD or free text")
-                with col_meta2:
-                    test_person = st.text_input("Test Person", key="meta_test_person")
-
-                # Validation
-                meta_errors = []
-                if not test_name or not test_name.strip():
-                    meta_errors.append("Test Name is required.")
-                if not test_description or not test_description.strip():
-                    meta_errors.append("Test Description is required.")
-                if not test_date or not test_date.strip():
-                    meta_errors.append("Test Date is required.")
-                if not test_person or not test_person.strip():
-                    meta_errors.append("Test Person is required.")
-
-                if meta_errors:
-                    for err in meta_errors:
-                        st.error(err)
-
-                # Prepare Excel data for single-click download when valid
-                excel_data = None
-                if not meta_errors:
-                    try:
-                        report_meta = {
-                            'test_name': test_name.strip(),
-                            'test_description': test_description.strip(),
-                            'test_date': test_date.strip(),
-                            'test_person': test_person.strip(),
-                        }
-                        original_filename = st.session_state.get('last_original_filename', (
-                            uploaded_file.name.rsplit('.', 1)[0] if 'uploaded_file' in locals() and hasattr(uploaded_file, 'name') else "temperature_data"
-                        ))
-                        excel_buffer = export_trimmed_data_to_excel(
-                            pd_latest['time_hours'],
-                            pd_latest['data'],
-                            si_latest,
-                            pd_latest,
-                            original_filename,
-                            report_meta=report_meta
-                        )
-                        excel_data = excel_buffer.getvalue()
-                    except Exception as e:
-                        st.error(f"Excel export failed: {str(e)}")
-                        excel_data = None
-
-                st.download_button(
-                    label="📊 Download Excel (Trimmed Data + Plot + Stability)",
-                    data=(excel_data or b''),
-                    file_name=f"trimmed_data_{timestamp}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                    help="Excel export includes trimmed data sheet, a plot sheet at the top, stability results, and your test metadata",
-                    disabled=bool(meta_errors or not excel_data)
-                )
+                # Minimal UI: show only 'Prepare Excel' button first, then metadata form
+                show_excel_form = st.session_state.get('show_excel_meta_form', False)
+                if not show_excel_form:
+                    st.button("Prepare Excel", type="primary", use_container_width=True, key="fallback_prepare_excel", on_click=lambda: st.session_state.update({'show_excel_meta_form': True}))
+                else:
+                    with st.form("fallback_excel_export_form"):
+                        st.markdown("Enter test metadata for Excel export:")
+                        test_name = st.text_input("Test Name", key="meta_test_name")
+                        test_description = st.text_area("Test Description", key="meta_test_desc", height=80)
+                        col_meta1, col_meta2 = st.columns(2)
+                        with col_meta1:
+                            test_date = st.text_input("Test Date", key="meta_test_date", placeholder="YYYY-MM-DD or free text")
+                        with col_meta2:
+                            test_person = st.text_input("Test Person", key="meta_test_person")
+                        submit_excel = st.form_submit_button("Generate Excel", type="primary")
+                    if submit_excel:
+                        try:
+                            report_meta = {
+                                'test_name': (test_name or '').strip() or None,
+                                'test_description': (test_description or '').strip() or None,
+                                'test_date': (test_date or '').strip() or None,
+                                'test_person': (test_person or '').strip() or None,
+                            }
+                            original_filename = st.session_state.get('last_original_filename', (
+                                uploaded_file.name.rsplit('.', 1)[0] if 'uploaded_file' in locals() and hasattr(uploaded_file, 'name') else "temperature_data"
+                            ))
+                            excel_buffer = export_trimmed_data_to_excel(
+                                pd_latest['time_hours'],
+                                pd_latest['data'],
+                                si_latest,
+                                pd_latest,
+                                original_filename,
+                                report_meta=report_meta
+                            )
+                            st.session_state['prepared_excel_bytes'] = excel_buffer.getvalue()
+                            st.session_state['prepared_excel_filename'] = f"trimmed_data_{timestamp}.xlsx"
+                            st.session_state['prepared_excel_help'] = "Excel export includes trimmed data sheet, a plot sheet at the top, stability results, and your test metadata"
+                            st.session_state['show_excel_meta_form'] = False
+                            st.success("Excel report prepared. Use the download button above.")
+                        except Exception as e:
+                            st.error(f"Excel export failed: {str(e)}")
+                        if st.button("Cancel", key="fallback_cancel_excel_form", help="Hide metadata form"):
+                            st.session_state['show_excel_meta_form'] = False
         
         except Exception as e:
             st.error(f"❌ Error loading Excel file: {str(e)}")
