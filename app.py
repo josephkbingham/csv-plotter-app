@@ -606,10 +606,12 @@ def apply_global_trimming(time_hours, temp_data):
     trimmed_temp_data = {}
     
     for channel, temps in temp_data.items():
-        temps_clean = temps.dropna()
-        if start_idx < len(temps_clean):
-            actual_end_idx = min(end_idx, len(temps_clean) - 1)
-            trimmed_temp_data[channel] = temps_clean.iloc[start_idx:actual_end_idx+1]
+        # Slice original series to keep alignment with time axis and avoid shifting due to dropna
+        if start_idx < len(temps):
+            actual_end_idx = min(end_idx, len(temps) - 1)
+            trimmed_series = temps.iloc[start_idx:actual_end_idx+1]
+            # Keep original NaNs; downstream can choose to handle them
+            trimmed_temp_data[channel] = trimmed_series.reset_index(drop=True)
         else:
             trimmed_temp_data[channel] = pd.Series(dtype=float)
     
@@ -1410,6 +1412,12 @@ def main():
                 start_time = time.time()  # Initialize timing outside try block
                 try:
                     
+                    # If no manual trimming selected this run, disable any stale global trimming
+                    if not (start_time_hours > 0.0 + 1e-9 or (('graph_data' in st.session_state) and (st.session_state.graph_data['time_hours'][-1] if 'graph_data' in st.session_state else 0) > 0 and (False))):
+                        st.session_state['global_trim_enabled'] = False
+                        st.session_state['global_start_time'] = None
+                        st.session_state['global_end_time'] = None
+                    
                     # Process the data
                     plot_data, fig = process_temperature_data(
                         df, descriptor_row, first_data_row, sample_interval_sec,
@@ -1417,9 +1425,9 @@ def main():
                         tick_interval_min, colormap_name, custom_colors_input,
                         curve_fit_params=curve_fit_params,
                         temp_rating=temp_rating,
-                        enable_start_trim=enable_start_trim,
+                        enable_start_trim=False,
                         start_time_hours=start_time_hours,
-                        enable_end_trim=enable_end_trim,
+                        enable_end_trim=False,
                         end_time_hours=end_time_hours,
                         preserve_original_time=preserve_original_time,
                         filter_params=filter_params
