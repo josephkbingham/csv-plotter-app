@@ -378,133 +378,102 @@ def export_trimmed_data_to_excel(time_hours, temp_data, sample_interval_sec, plo
 
 def analyze_temperature_stability(time_hours, temp_data, sample_interval_sec, stability_threshold=1.0, interval_minutes=15, row_offset=0, san_series=None):
     """
-    Analyze temperature stability using trimmed data.
-    Checks for stability using 3 sample points, each 15 minutes apart.
-    Stability is defined as less than 1°C deviation between consecutive samples.
-    Sample indices are mapped back to actual Excel row numbers.
-    
-    Args:
-        time_hours: Time array in hours (trimmed)
-        temp_data: Dictionary of temperature data by channel (trimmed)
-        sample_interval_sec: Sample interval in seconds
-        stability_threshold: Maximum allowed temperature deviation in °C (default 1.0)
-        interval_minutes: Time interval between samples in minutes (default 15)
-        row_offset: Offset to map trimmed indices back to Excel row numbers
-    
-    Returns:
-        Dictionary with stability analysis results for each channel
+    New stability analysis:
+    - Identify last sample (T), T-30, T-60, T-90 (row offsets)
+    - Compute differences: d1 = T - T-30, d2 = T-30 - T-60, d3 = T-60 - T-90
+    - Unstable if any |d| > stability_threshold
+    Returns dictionary keyed by channel with required fields for UI/export.
     """
     results = {}
-    
+
     if len(time_hours) == 0:
         return results
-    
-    # Calculate sample interval between stability check points
-    interval_seconds = interval_minutes * 60
-    sample_interval_points = int(interval_seconds / sample_interval_sec)
-    
-    # Need at least 3 points for stability analysis (spanning 30 minutes)
-    min_samples_needed = 2 * sample_interval_points + 1
-    
+
     for channel, temps in temp_data.items():
         temps_clean = temps.dropna()
-        
-        if len(temps_clean) < min_samples_needed:
+        n = len(temps_clean)
+
+        # Need last, last-30, last-60, last-90
+        required = 91  # last index -90 must be >= 0
+        if n < required:
             results[channel] = {
                 'stable': False,
-                'reason': f'Insufficient data (need {min_samples_needed} samples, have {len(temps_clean)})',
+                'reason': f'Insufficient data (need {required} samples, have {n})',
                 'stability_points': [],
+                'differences': {},
                 'max_deviation': None,
-                'stability_duration': 0,
+                'stability_duration': None,
                 'stability_start_time': None,
                 'stability_end_time': None,
                 'average_temp': None
             }
             continue
-        
-        # Start from the end and work backwards to find stability
-        stability_points = []
-        max_deviation = 0
-        is_stable = False
-        
-        # Check from the last sample backwards
-        for start_idx in range(len(temps_clean) - min_samples_needed, -1, -1):
-            # Get three sample points: start, start+interval, start+2*interval
-            indices = [start_idx, start_idx + sample_interval_points, start_idx + 2 * sample_interval_points]
-            
-            if indices[-1] >= len(temps_clean):
-                continue
-            
-            sample_temps = [temps_clean.iloc[idx] for idx in indices]
-            sample_times = [time_hours[idx] for idx in indices]
-            
-            # Calculate deviations between consecutive samples
-            deviation_1 = abs(sample_temps[1] - sample_temps[0])
-            deviation_2 = abs(sample_temps[2] - sample_temps[1])
-            
-            current_max_deviation = max(deviation_1, deviation_2)
-            
-            # Check if all deviations are within threshold
-            if deviation_1 <= stability_threshold and deviation_2 <= stability_threshold:
-                # Map indices from dropna-ed series back to original indices for SAN lookup
-                orig_idx0 = temps_clean.index[indices[0]]
-                orig_idx1 = temps_clean.index[indices[1]]
-                orig_idx2 = temps_clean.index[indices[2]]
-                san0 = (None if san_series is None or orig_idx0 >= len(san_series) else san_series.iloc[orig_idx0])
-                san1 = (None if san_series is None or orig_idx1 >= len(san_series) else san_series.iloc[orig_idx1])
-                san2 = (None if san_series is None or orig_idx2 >= len(san_series) else san_series.iloc[orig_idx2])
-                stability_points = [
-                    {'time_hours': sample_times[0], 'temp': sample_temps[0], 'row': orig_idx0 + row_offset, 'index': orig_idx0 + row_offset, 'san': san0},
-                    {'time_hours': sample_times[1], 'temp': sample_temps[1], 'row': orig_idx1 + row_offset, 'index': orig_idx1 + row_offset, 'san': san1},
-                    {'time_hours': sample_times[2], 'temp': sample_temps[2], 'row': orig_idx2 + row_offset, 'index': orig_idx2 + row_offset, 'san': san2}
-                ]
-                max_deviation = current_max_deviation
-                is_stable = True
-                break
-        
-        # Calculate stability duration if stable
-        stability_duration = 0
-        if is_stable and stability_points:
-            stability_duration = stability_points[-1]['time_hours'] - stability_points[0]['time_hours']
-        
-        # For unstable channels, still provide the last 3 data points and their stats
-        if not is_stable and len(temps_clean) >= 3:
-            # Get the last 3 data points for display
-            last_indices = [len(temps_clean) - 1, len(temps_clean) - 1 - sample_interval_points, len(temps_clean) - 1 - 2*sample_interval_points]
-            # Ensure indices are valid and in reverse order (latest first)
-            valid_indices = [idx for idx in last_indices if idx >= 0]
-            valid_indices.sort(reverse=True)  # Latest first
-            
-            if len(valid_indices) >= 3:
-                # Map to original indices for SAN lookup
-                orig_idxA = temps_clean.index[valid_indices[0]]
-                orig_idxB = temps_clean.index[valid_indices[1]]
-                orig_idxC = temps_clean.index[valid_indices[2]]
-                sanA = (None if san_series is None or orig_idxA >= len(san_series) else san_series.iloc[orig_idxA])
-                sanB = (None if san_series is None or orig_idxB >= len(san_series) else san_series.iloc[orig_idxB])
-                sanC = (None if san_series is None or orig_idxC >= len(san_series) else san_series.iloc[orig_idxC])
-                stability_points = [
-                    {'time_hours': time_hours[valid_indices[0]], 'temp': temps_clean.iloc[valid_indices[0]], 'row': orig_idxA + row_offset, 'index': orig_idxA + row_offset, 'san': sanA},
-                    {'time_hours': time_hours[valid_indices[1]], 'temp': temps_clean.iloc[valid_indices[1]], 'row': orig_idxB + row_offset, 'index': orig_idxB + row_offset, 'san': sanB},
-                    {'time_hours': time_hours[valid_indices[2]], 'temp': temps_clean.iloc[valid_indices[2]], 'row': orig_idxC + row_offset, 'index': orig_idxC + row_offset, 'san': sanC}
-                ]
-                
-                # Calculate max deviation for display
-                dev1 = abs(stability_points[1]['temp'] - stability_points[0]['temp'])
-                dev2 = abs(stability_points[2]['temp'] - stability_points[1]['temp'])
-                max_deviation = max(dev1, dev2)
-        
+
+        # Indices in cleaned series
+        idx0 = n - 1
+        idx30 = n - 1 - 30
+        idx60 = n - 1 - 60
+        idx90 = n - 1 - 90
+
+        T0 = float(temps_clean.iloc[idx0])
+        T30 = float(temps_clean.iloc[idx30])
+        T60 = float(temps_clean.iloc[idx60])
+        T90 = float(temps_clean.iloc[idx90])
+
+        d1 = T0 - T30
+        d2 = T30 - T60
+        d3 = T60 - T90
+
+        abs_diffs = [abs(d1), abs(d2), abs(d3)]
+        max_dev = max(abs_diffs)
+
+        # Determine stability
+        unstable_flags = [abs(d1) > stability_threshold, abs(d2) > stability_threshold, abs(d3) > stability_threshold]
+        is_stable = not any(unstable_flags)
+
+        # Map to original indices for SAN/row mapping
+        orig_idx0 = int(temps_clean.index[idx0])
+        orig_idx30 = int(temps_clean.index[idx30])
+        orig_idx60 = int(temps_clean.index[idx60])
+        san0 = (None if san_series is None or orig_idx0 >= len(san_series) else san_series.iloc[orig_idx0])
+        san30 = (None if san_series is None or orig_idx30 >= len(san_series) else san_series.iloc[orig_idx30])
+        san60 = (None if san_series is None or orig_idx60 >= len(san_series) else san_series.iloc[orig_idx60])
+
+        stability_points = [
+            {'time_hours': time_hours[idx0] if idx0 < len(time_hours) else None, 'temp': T0, 'row': orig_idx0 + row_offset, 'index': orig_idx0 + row_offset, 'san': san0},
+            {'time_hours': time_hours[idx30] if idx30 < len(time_hours) else None, 'temp': T30, 'row': orig_idx30 + row_offset, 'index': orig_idx30 + row_offset, 'san': san30},
+            {'time_hours': time_hours[idx60] if idx60 < len(time_hours) else None, 'temp': T60, 'row': orig_idx60 + row_offset, 'index': orig_idx60 + row_offset, 'san': san60},
+        ]
+
+        # Build reason text
+        if is_stable:
+            reason = 'Temperature stable: all 30-sample changes ≤ {:.1f}°C'.format(stability_threshold)
+        else:
+            reasons = []
+            if unstable_flags[0]:
+                reasons.append(f"Difference between T and T-30 was {abs(d1):.1f}°C")
+            if unstable_flags[1]:
+                reasons.append(f"Difference between T-30 and T-60 was {abs(d2):.1f}°C")
+            if unstable_flags[2]:
+                reasons.append(f"Difference between T-60 and T-90 was {abs(d3):.1f}°C")
+            reason = 'Unstable: ' + '; '.join(reasons)
+
         results[channel] = {
             'stable': is_stable,
-            'reason': 'Temperature stable within threshold' if is_stable else f'No stable period found (deviation > {stability_threshold}°C)',
+            'reason': reason,
             'stability_points': stability_points,
-            'max_deviation': max_deviation,
-            'stability_duration': stability_duration,
-            'stability_start_time': stability_points[0]['time_hours'] if stability_points else None,
-            'stability_end_time': stability_points[-1]['time_hours'] if stability_points else None,
-            'average_temp': np.mean([p['temp'] for p in stability_points]) if stability_points else None
+            'differences': {
+                'd1 (T vs T-30)': round(d1, 3),
+                'd2 (T-30 vs T-60)': round(d2, 3),
+                'd3 (T-60 vs T-90)': round(d3, 3)
+            },
+            'max_deviation': max_dev,
+            'stability_duration': None,
+            'stability_start_time': None,
+            'stability_end_time': None,
+            'average_temp': float(np.mean([p['temp'] for p in stability_points])) if stability_points else None
         }
-    
+
     return results
 
 
@@ -1500,7 +1469,7 @@ def main():
                             st.header("🔄 Temperature Stability Analysis")
                             stability_results = plot_data['stability_analysis']
                             
-                            st.info("🔍 Stability check: Starting from end of data, looking for 3 sample points (15 min apart) with ≤1°C deviation")
+                            st.info("🔍 Stability check: Calculating temperature change over three consecutive 30-sample intervals from the end of the data. A channel is unstable if any change exceeds 1.0°C.")
                             st.info("📊 Sample 1, 2, 3: The three temperature readings used for stability analysis (Sample 1 = latest, Sample 3 = earliest). SAN shown in parentheses for traceability.")
                             st.warning("📋 Sample numbers (#) shown below correspond to actual Excel row numbers (accounting for data row configuration)")
                             
