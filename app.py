@@ -1429,6 +1429,7 @@ def main():
                         # Persist latest plot context for stable export
                         st.session_state['plot_data_latest'] = plot_data
                         st.session_state['sample_interval_sec'] = sample_interval_sec
+                        st.session_state['last_plot_figure'] = fig
                         if hasattr(uploaded_file, 'name'):
                             st.session_state['last_original_filename'] = uploaded_file.name.rsplit('.', 1)[0]
                         
@@ -1477,145 +1478,8 @@ def main():
                         
 
                         
-                        # Export report
-                        st.subheader("📄 Export Report")
-                        st.caption("PDF/SVG downloads export the plot only. Use the Excel download for trimmed data with the plot on top and stability data included.")
-                        
-                        # Generate download button
-                        file_data = b''
-                        mime_type = 'application/pdf'
-                        file_extension = 'pdf'
-                        
-                        if export_format == 'PDF':
-                            buffer = io.BytesIO()
-                            fig.savefig(buffer, format='pdf', bbox_inches='tight', dpi=300)
-                            buffer.seek(0)
-                            file_data = buffer.getvalue()
-                            mime_type = 'application/pdf'
-                            file_extension = 'pdf'
-                            
-                        elif export_format == 'JPEG':
-                            buffer = io.BytesIO()
-                            fig.savefig(buffer, format='jpeg', bbox_inches='tight', dpi=300, facecolor='white')
-                            buffer.seek(0)
-                            file_data = buffer.getvalue()
-                            mime_type = 'image/jpeg'
-                            file_extension = 'jpg'
-                            
-                        elif export_format == 'SVG':
-                            buffer = io.StringIO()
-                            fig.savefig(buffer, format='svg', bbox_inches='tight')
-                            file_data = buffer.getvalue().encode('utf-8')
-                            mime_type = 'image/svg+xml'
-                            file_extension = 'svg'
-                        
-                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        filename = f"temperature_plot_{timestamp}.{file_extension}"
-                        
-                        # Create download buttons for plots and Excel export
-                        col_download1, col_download2, col_download3 = st.columns(3)
-
-                        with col_download1:
-                            st.download_button(
-                                label=f"📥 Download {export_format} (Plot Only)",
-                                data=file_data,
-                                file_name=filename,
-                                mime=mime_type,
-                                use_container_width=True
-                            )
-
-                        with col_download2:
-                            # Generate alternate format
-                            if export_format != 'PDF':
-                                pdf_buffer = io.BytesIO()
-                                fig.savefig(pdf_buffer, format='pdf', bbox_inches='tight', dpi=300)
-                                pdf_buffer.seek(0)
-                                pdf_data = pdf_buffer.getvalue()
-                                
-                                st.download_button(
-                                    label="📥 Download PDF (Plot Only)",
-                                    data=pdf_data,
-                                    file_name=f"temperature_plot_{timestamp}.pdf",
-                                    mime='application/pdf',
-                                    use_container_width=True
-                                )
-                            else:
-                                svg_buffer = io.StringIO()
-                                fig.savefig(svg_buffer, format='svg', bbox_inches='tight')
-                                svg_data = svg_buffer.getvalue().encode('utf-8')
-                                
-                                st.download_button(
-                                    label="📥 Download SVG (Plot Only)",
-                                    data=svg_data,
-                                    file_name=f"temperature_plot_{timestamp}.svg",
-                                    mime='image/svg+xml',
-                                    use_container_width=True
-                                )
-
-                        with col_download3:
-                            # Excel export with trimmed data, plot, stability, and test metadata
-                            show_excel_form = st.session_state.get('show_excel_meta_form', False)
-                            if not show_excel_form:
-                                if st.button("Prepare Excel", type="primary", use_container_width=True):
-                                    st.session_state['show_excel_meta_form'] = True
-                            else:
-                                with st.form("excel_export_form"):
-                                    st.markdown("Enter test metadata for Excel export:")
-                                    test_name = st.text_input("Test Name", key="meta_test_name")
-                                    test_description = st.text_area("Test Description", key="meta_test_desc", height=80)
-                                    col_meta1, col_meta2 = st.columns(2)
-                                    with col_meta1:
-                                        test_date = st.text_input("Test Date", key="meta_test_date", placeholder="YYYY-MM-DD or free text")
-                                    with col_meta2:
-                                        test_person = st.text_input("Test Person", key="meta_test_person")
-                                    submit_excel = st.form_submit_button("Generate Excel", type="primary")
-                                if submit_excel:
-                                    try:
-                                        report_meta = {
-                                            'test_name': (test_name or '').strip() or None,
-                                            'test_description': (test_description or '').strip() or None,
-                                            'test_date': (test_date or '').strip() or None,
-                                            'test_person': (test_person or '').strip() or None,
-                                        }
-                                        pd_latest = st.session_state.get('plot_data_latest', plot_data)
-                                        si_latest = st.session_state.get('sample_interval_sec', sample_interval_sec)
-                                        original_filename = st.session_state.get('last_original_filename', (
-                                            uploaded_file.name.rsplit('.', 1)[0] if hasattr(uploaded_file, 'name') else "temperature_data"
-                                        ))
-                                        excel_buffer = export_trimmed_data_to_excel(
-                                            pd_latest['time_hours'], 
-                                            pd_latest['data'], 
-                                            si_latest, 
-                                            pd_latest, 
-                                            original_filename,
-                                            report_meta=report_meta
-                                        )
-                                        st.session_state['prepared_excel_bytes'] = excel_buffer.getvalue()
-                                        st.session_state['prepared_excel_filename'] = f"trimmed_data_{timestamp}.xlsx"
-                                        st.session_state['prepared_excel_help'] = "Excel export includes trimmed data sheet, a plot sheet at the top, stability results, and your test metadata"
-                                        st.session_state['show_excel_meta_form'] = False
-                                    except Exception as e:
-                                        st.error(f"Excel export failed: {str(e)}")
-                                if st.button("Cancel", help="Hide metadata form"):
-                                    st.session_state['show_excel_meta_form'] = False
-
-                            # Show download if prepared in this or a previous run
-                            excel_bytes = st.session_state.get('prepared_excel_bytes')
-                            excel_name = st.session_state.get('prepared_excel_filename', f"trimmed_data_{timestamp}.xlsx")
-                            excel_help = st.session_state.get('prepared_excel_help', "Excel export includes trimmed data sheet, a plot sheet at the top, stability results, and your test metadata")
-                            if excel_bytes:
-                                st.download_button(
-                                    label="📊 Download Excel (Trimmed Data + Plot + Stability)",
-                                    data=excel_bytes,
-                                    file_name=excel_name,
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                    use_container_width=True,
-                                    help=excel_help
-                                )
-                                if st.button("Clear prepared Excel", help="Removes the prepared file so you can re-prepare with new settings"):
-                                    st.session_state.pop('prepared_excel_bytes', None)
-                                    st.session_state.pop('prepared_excel_filename', None)
-                                    st.session_state.pop('prepared_excel_help', None)
+                        # Export section moved to bottom of the app. Please use the Export Report panel at the end of the page.
+                        st.info("Scroll to the bottom for the Export Report section (plot downloads and Excel export).")
                         
                         # Mark that we rendered the export section in this run
                         st.session_state['export_section_shown'] = True
@@ -1833,6 +1697,148 @@ def main():
             ...
             ```
             """)
+
+    # Always show a bottom Export Report section if we have plot data
+    if 'plot_data_latest' in st.session_state:
+        st.divider()
+        st.subheader("📄 Export Report")
+        st.caption("PDF/SVG downloads export the plot only. Use the Excel export to include trimmed data, the plot image, stability, and metadata.")
+
+        pd_latest = st.session_state['plot_data_latest']
+        si_latest = st.session_state.get('sample_interval_sec', st.session_state.get('current_sample_interval', 60))
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Plot-only downloads based on current export format selection
+        export_format = st.session_state.get('current_export_format', 'PDF') if 'current_export_format' in st.session_state else 'PDF'
+        fig_for_export = pd_latest.get('figure') if isinstance(pd_latest, dict) else None
+
+        # Generate plot-only downloads using the latest figure from the last processing run
+        fig_for_export = st.session_state.get('last_plot_figure')
+        file_data = b''
+        mime_type = 'application/pdf'
+        file_extension = 'pdf'
+        if fig_for_export is not None:
+            if export_format == 'PDF':
+                buffer = io.BytesIO()
+                fig_for_export.savefig(buffer, format='pdf', bbox_inches='tight', dpi=300)
+                buffer.seek(0)
+                file_data = buffer.getvalue()
+                mime_type = 'application/pdf'
+                file_extension = 'pdf'
+            elif export_format == 'JPEG':
+                buffer = io.BytesIO()
+                fig_for_export.savefig(buffer, format='jpeg', bbox_inches='tight', dpi=300, facecolor='white')
+                buffer.seek(0)
+                file_data = buffer.getvalue()
+                mime_type = 'image/jpeg'
+                file_extension = 'jpg'
+            elif export_format == 'SVG':
+                buffer = io.StringIO()
+                fig_for_export.savefig(buffer, format='svg', bbox_inches='tight')
+                file_data = buffer.getvalue().encode('utf-8')
+                mime_type = 'image/svg+xml'
+                file_extension = 'svg'
+        st.download_button(
+            label=f"📥 Download {export_format} (Plot Only)",
+            data=file_data,
+            file_name=f"temperature_plot_{timestamp}.{file_extension}",
+            mime=mime_type,
+            use_container_width=True,
+            disabled=(fig_for_export is None)
+        )
+        # Alternate format button
+        if fig_for_export is not None:
+            alt_label = "📥 Download PDF (Plot Only)" if export_format != 'PDF' else "📥 Download SVG (Plot Only)"
+            if export_format != 'PDF':
+                pdf_buffer = io.BytesIO()
+                fig_for_export.savefig(pdf_buffer, format='pdf', bbox_inches='tight', dpi=300)
+                pdf_buffer.seek(0)
+                alt_data = pdf_buffer.getvalue()
+                alt_name = f"temperature_plot_{timestamp}.pdf"
+                alt_mime = 'application/pdf'
+            else:
+                svg_buffer = io.StringIO()
+                fig_for_export.savefig(svg_buffer, format='svg', bbox_inches='tight')
+                alt_data = svg_buffer.getvalue().encode('utf-8')
+                alt_name = f"temperature_plot_{timestamp}.svg"
+                alt_mime = 'image/svg+xml'
+            st.download_button(
+                label=alt_label,
+                data=alt_data,
+                file_name=alt_name,
+                mime=alt_mime,
+                use_container_width=True
+            )
+        else:
+            st.download_button(
+                label="📥 Download PDF (Plot Only)",
+                data=b"",
+                file_name=f"temperature_plot_{timestamp}.pdf",
+                mime='application/pdf',
+                use_container_width=True,
+                disabled=True
+            )
+
+        # Prepared Excel quick download if exists
+        prepared_bytes = st.session_state.get('prepared_excel_bytes')
+        prepared_name = st.session_state.get('prepared_excel_filename', f"trimmed_data_{timestamp}.xlsx")
+        prepared_help = st.session_state.get('prepared_excel_help', "Excel export includes trimmed data sheet, a plot sheet at the top, stability results, and your test metadata")
+        if prepared_bytes:
+            st.success("Excel report prepared. Click below to download.")
+            st.download_button(
+                label="📊 Download Excel (Trimmed Data + Plot + Stability)",
+                data=prepared_bytes,
+                file_name=prepared_name,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                help=prepared_help
+            )
+            if st.button("Clear prepared Excel", help="Removes the prepared file so you can re-prepare with new settings"):
+                st.session_state.pop('prepared_excel_bytes', None)
+                st.session_state.pop('prepared_excel_filename', None)
+                st.session_state.pop('prepared_excel_help', None)
+
+        # Minimal Excel flow: button first, then metadata form
+        show_excel_form = st.session_state.get('show_excel_meta_form', False)
+        if not show_excel_form:
+            st.button("Prepare Excel", type="primary", use_container_width=True, key="bottom_prepare_excel", on_click=lambda: st.session_state.update({'show_excel_meta_form': True}))
+        else:
+            with st.form("bottom_excel_export_form"):
+                st.markdown("Enter test metadata for Excel export:")
+                test_name = st.text_input("Test Name", key="meta_test_name")
+                test_description = st.text_area("Test Description", key="meta_test_desc", height=80)
+                col_meta1, col_meta2 = st.columns(2)
+                with col_meta1:
+                    test_date = st.text_input("Test Date", key="meta_test_date", placeholder="YYYY-MM-DD or free text")
+                with col_meta2:
+                    test_person = st.text_input("Test Person", key="meta_test_person")
+                submit_excel = st.form_submit_button("Generate Excel", type="primary")
+            if submit_excel:
+                try:
+                    report_meta = {
+                        'test_name': (test_name or '').strip() or None,
+                        'test_description': (test_description or '').strip() or None,
+                        'test_date': (test_date or '').strip() or None,
+                        'test_person': (test_person or '').strip() or None,
+                    }
+                    original_filename = st.session_state.get('last_original_filename', "temperature_data")
+                    excel_buffer = export_trimmed_data_to_excel(
+                        pd_latest['time_hours'],
+                        pd_latest['data'],
+                        si_latest,
+                        pd_latest,
+                        original_filename,
+                        report_meta=report_meta
+                    )
+                    st.session_state['prepared_excel_bytes'] = excel_buffer.getvalue()
+                    st.session_state['prepared_excel_filename'] = f"trimmed_data_{timestamp}.xlsx"
+                    st.session_state['prepared_excel_help'] = "Excel export includes trimmed data sheet, a plot sheet at the top, stability results, and your test metadata"
+                    st.session_state['show_excel_meta_form'] = False
+                    st.success("Excel report prepared. Use the download button above.")
+                except Exception as e:
+                    st.error(f"Excel export failed: {str(e)}")
+            if st.button("Cancel", key="bottom_cancel_excel_form", help="Hide metadata form"):
+                st.session_state['show_excel_meta_form'] = False
 
 
 def process_temperature_data(df, descriptor_row, first_data_row, sample_interval_sec,
