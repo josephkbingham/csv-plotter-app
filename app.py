@@ -915,6 +915,7 @@ def main():
                         st.session_state.global_end_trim = enable_end_trim
                         st.session_state.global_start_time = start_time_hours if enable_start_trim else None
                         st.session_state.global_end_time = end_time_hours if enable_end_trim else None
+                        st.session_state.global_preserve_original_time = preserve_original_time
                         
                         st.success("✅ Trimming settings applied! All future analysis will use only the selected data range.")
                         st.info("🔄 Any graphs you generate from now on will automatically exclude the trimmed regions.")
@@ -1412,12 +1413,6 @@ def main():
                 start_time = time.time()  # Initialize timing outside try block
                 try:
                     
-                    # If no manual trimming selected this run, disable any stale global trimming
-                    if not (start_time_hours > 0.0 + 1e-9 or (('graph_data' in st.session_state) and (st.session_state.graph_data['time_hours'][-1] if 'graph_data' in st.session_state else 0) > 0 and (False))):
-                        st.session_state['global_trim_enabled'] = False
-                        st.session_state['global_start_time'] = None
-                        st.session_state['global_end_time'] = None
-                    
                     # Process the data
                     plot_data, fig = process_temperature_data(
                         df, descriptor_row, first_data_row, sample_interval_sec,
@@ -1425,9 +1420,9 @@ def main():
                         tick_interval_min, colormap_name, custom_colors_input,
                         curve_fit_params=curve_fit_params,
                         temp_rating=temp_rating,
-                        enable_start_trim=False,
+                        enable_start_trim=enable_start_trim,
                         start_time_hours=start_time_hours,
-                        enable_end_trim=False,
+                        enable_end_trim=enable_end_trim,
                         end_time_hours=end_time_hours,
                         preserve_original_time=preserve_original_time,
                         filter_params=filter_params
@@ -1735,6 +1730,7 @@ def main():
                 use_container_width=True,
                 help=prepared_help
             )
+            st.caption(f"Filename: {prepared_name}")
             if st.button("Clear prepared Excel", help="Removes the prepared file so you can re-prepare with new settings"):
                 st.session_state.pop('prepared_excel_bytes', None)
                 st.session_state.pop('prepared_excel_filename', None)
@@ -1754,6 +1750,7 @@ def main():
                     test_date = st.text_input("Test Date", key="bottom_meta_test_date", placeholder="YYYY-MM-DD or free text")
                 with col_meta2:
                     test_person = st.text_input("Test Person", key="bottom_meta_test_person")
+                excel_filename_input = st.text_input("Excel File Name (optional)", key="bottom_meta_excel_filename", placeholder="my_report.xlsx")
                 submit_excel = st.form_submit_button("Generate Excel", type="primary")
             if submit_excel:
                 try:
@@ -1772,8 +1769,17 @@ def main():
                         original_filename,
                         report_meta=report_meta
                     )
+                    # Determine prepared filename
+                    excel_filename_clean = (excel_filename_input or '').strip()
+                    if excel_filename_clean:
+                        # Ensure .xlsx extension
+                        if not excel_filename_clean.lower().endswith('.xlsx'):
+                            excel_filename_clean += '.xlsx'
+                        prepared_name = excel_filename_clean
+                    else:
+                        prepared_name = f"trimmed_data_{timestamp}.xlsx"
                     st.session_state['prepared_excel_bytes'] = excel_buffer.getvalue()
-                    st.session_state['prepared_excel_filename'] = f"trimmed_data_{timestamp}.xlsx"
+                    st.session_state['prepared_excel_filename'] = prepared_name
                     st.session_state['prepared_excel_help'] = "Excel export includes trimmed data sheet, a plot sheet at the top, stability results, and your test metadata"
                     st.session_state['show_excel_meta_form'] = False
                     st.success("Excel report prepared. Use the download button above.")
