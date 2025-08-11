@@ -424,11 +424,10 @@ def analyze_temperature_stability(time_hours, temp_data, sample_interval_sec, st
         d2 = T30 - T60
         d3 = T60 - T90
 
-        abs_diffs = [abs(d1), abs(d2), abs(d3)]
-        max_dev = max(abs_diffs)
+        max_dev = max(d1, d2, d3)
 
-        # Determine stability
-        unstable_flags = [abs(d1) > stability_threshold, abs(d2) > stability_threshold, abs(d3) > stability_threshold]
+        # Determine stability (only increases > threshold matter)
+        unstable_flags = [d1 > stability_threshold, d2 > stability_threshold, d3 > stability_threshold]
         is_stable = not any(unstable_flags)
 
         # Map to original indices for SAN/row mapping
@@ -451,11 +450,11 @@ def analyze_temperature_stability(time_hours, temp_data, sample_interval_sec, st
         else:
             reasons = []
             if unstable_flags[0]:
-                reasons.append(f"Difference between T and T-30 was {abs(d1):.1f}°C")
+                reasons.append(f"Difference between T and T-30 was {d1:.1f}°C")
             if unstable_flags[1]:
-                reasons.append(f"Difference between T-30 and T-60 was {abs(d2):.1f}°C")
+                reasons.append(f"Difference between T-30 and T-60 was {d2:.1f}°C")
             if unstable_flags[2]:
-                reasons.append(f"Difference between T-60 and T-90 was {abs(d3):.1f}°C")
+                reasons.append(f"Difference between T-60 and T-90 was {d3:.1f}°C")
             reason = 'Unstable: ' + '; '.join(reasons)
 
         results[channel] = {
